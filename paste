@@ -1,0 +1,407 @@
+Good — this is exactly the right question.
+If the system is *well-designed*, the logs are not just output — they are a **structured, queryable trace of cognition, action, and state transitions**.
+
+Let’s treat this as a **typed event stream**, not a text dump.
+
+---
+
+# 🧠 0. Mental model
+
+We want logs that behave like:
+
+```idris
+Trace : Time → Event → StateΔ → Evidence → Confidence
+```
+
+Each entry answers:
+
+* **What happened**
+* **Why it happened**
+* **What changed**
+* **How confident we are**
+
+---
+
+# 🧩 1. Top-level log channels (ontology)
+
+Your system naturally decomposes into:
+
+```clojure
+{:channels
+ [:system        ;; orchestration + lifecycle
+  :discovery     ;; repo understanding
+  :planning      ;; decomposition + intent
+  :execution     ;; code edits + commands
+  :test          ;; test runs + results
+  :evaluation    ;; pass/fail reasoning
+  :git           ;; commits + diffs
+  :agent         ;; LLM thoughts (summarized)
+  :anomaly       ;; weirdness / divergence
+  :metrics       ;; cost / latency / tokens
+  :heartbeat     ;; liveness + loop ticks]}
+```
+
+---
+
+# 🧾 2. Canonical log entry structure
+
+Every line should be structured (JSONL or EDN):
+
+```json
+{
+  "ts": "2026-03-30T12:01:03.221Z",
+  "agent": "agent-parser",
+  "repo": "parser-lib",
+  "loop": 7,
+  "channel": "execution",
+  "event": "apply_patch",
+  "summary": "Fix off-by-one in tokenizer",
+  "details": {
+    "files": ["src/tokenizer.rs"],
+    "diff_hunks": 3
+  },
+  "confidence": 0.78
+}
+```
+
+---
+
+# 🔍 3. What a REAL run looks like (multi-channel trace)
+
+Let’s simulate a real sequence.
+
+---
+
+## 🟦 SYSTEM / HEARTBEAT
+
+```json
+{"ts":"12:00:00","channel":"system","event":"agent_start","agent":"agent-parser","repo":"parser-lib"}
+
+{"ts":"12:00:01","channel":"heartbeat","loop":1,"status":"alive","cpu":0.12,"mem_mb":220}
+```
+
+---
+
+## 🟨 DISCOVERY
+
+```json
+{
+  "ts":"12:00:02",
+  "channel":"discovery",
+  "event":"repo_scan",
+  "summary":"Rust project with cargo tests",
+  "details":{
+    "language":"rust",
+    "test_command":"cargo test",
+    "files_indexed":142
+  }
+}
+```
+
+```json
+{
+  "ts":"12:00:03",
+  "channel":"discovery",
+  "event":"failure_surface",
+  "summary":"3 failing tests detected",
+  "details":{
+    "tests":[
+      "tokenizer::edge_case_empty",
+      "parser::nested_expr",
+      "lexer::unicode"
+    ]
+  }
+}
+```
+
+---
+
+## 🟪 PLANNING
+
+```json
+{
+  "ts":"12:00:04",
+  "channel":"planning",
+  "event":"plan_generated",
+  "summary":"Investigate tokenizer boundary conditions",
+  "details":{
+    "hypotheses":[
+      "off-by-one index",
+      "unicode handling issue"
+    ],
+    "strategy":"fix tokenizer first"
+  },
+  "confidence":0.72
+}
+```
+
+---
+
+## 🟧 EXECUTION
+
+```json
+{
+  "ts":"12:00:06",
+  "channel":"execution",
+  "event":"read_file",
+  "details":{"path":"src/tokenizer.rs"}
+}
+```
+
+```json
+{
+  "ts":"12:00:08",
+  "channel":"execution",
+  "event":"apply_patch",
+  "summary":"Adjust loop boundary condition",
+  "details":{
+    "file":"src/tokenizer.rs",
+    "lines_changed":12
+  }
+}
+```
+
+---
+
+## 🟥 TEST
+
+```json
+{
+  "ts":"12:00:10",
+  "channel":"test",
+  "event":"run",
+  "command":"cargo test",
+  "result":"fail",
+  "details":{
+    "passed":47,
+    "failed":2
+  }
+}
+```
+
+---
+
+## 🟫 EVALUATION
+
+```json
+{
+  "ts":"12:00:11",
+  "channel":"evaluation",
+  "event":"failure_analysis",
+  "summary":"unicode test still failing",
+  "details":{
+    "remaining_failure":"lexer::unicode",
+    "likely_cause":"incorrect byte-length assumption"
+  },
+  "confidence":0.66
+}
+```
+
+---
+
+## 🟪 AGENT (compressed cognition)
+
+```json
+{
+  "ts":"12:00:12",
+  "channel":"agent",
+  "event":"reasoning_summary",
+  "summary":"Tokenizer fixed; lexer likely miscounts UTF-8 width"
+}
+```
+
+---
+
+## 🟧 EXECUTION (second pass)
+
+```json
+{
+  "ts":"12:00:15",
+  "channel":"execution",
+  "event":"apply_patch",
+  "summary":"Switch to char iteration instead of byte indexing"
+}
+```
+
+---
+
+## 🟩 TEST (success)
+
+```json
+{
+  "ts":"12:00:18",
+  "channel":"test",
+  "event":"run",
+  "result":"pass",
+  "details":{"passed":49,"failed":0}
+}
+```
+
+---
+
+## 🟦 GIT
+
+```json
+{
+  "ts":"12:00:19",
+  "channel":"git",
+  "event":"commit",
+  "summary":"fix: tokenizer boundary + unicode handling",
+  "details":{
+    "files":2,
+    "insertions":34,
+    "deletions":12
+  }
+}
+```
+
+---
+
+## 🟩 METRICS
+
+```json
+{
+  "ts":"12:00:20",
+  "channel":"metrics",
+  "event":"usage",
+  "details":{
+    "tokens_total":18234,
+    "cost_usd":0.42,
+    "loops":2
+  }
+}
+```
+
+---
+
+# 🧠 4. What makes this *powerful*
+
+This is not just logging.
+
+It enables:
+
+### 1. Replay
+
+```bash
+replay --agent agent-parser --loop 7
+```
+
+### 2. Diff reasoning
+
+```bash
+show --event execution.apply_patch
+```
+
+### 3. Failure clustering
+
+```bash
+grep channel=evaluation | group-by cause
+```
+
+### 4. Agent introspection
+
+* where it hesitated
+* where confidence dropped
+* where loops stalled
+
+---
+
+# ⚠️ 5. The “anomaly” channel (critical)
+
+This is where real systems become usable.
+
+```json
+{
+  "ts":"12:00:09",
+  "channel":"anomaly",
+  "event":"loop_stall",
+  "summary":"Same patch attempted 3 times",
+  "severity":"high"
+}
+```
+
+```json
+{
+  "ts":"12:00:11",
+  "channel":"anomaly",
+  "event":"test_flaky",
+  "summary":"test passes/fails nondeterministically"
+}
+```
+
+---
+
+# 🧬 6. Higher-order derived logs (your style)
+
+You can layer **semantic transforms**:
+
+```clojure
+{:derived
+ {:trajectory  ;; evolution of solution
+  [:tokenizer-fix → :lexer-fix → :green]
+
+ :confidence-curve
+ [0.72 → 0.66 → 0.81]
+
+ :failure-manifold
+ {:unicode ["byte/char mismatch"]}}}
+```
+
+---
+
+# 🎛 7. What your tmux/dashboard would show
+
+Instead of raw logs, you’d see:
+
+```
+agent-parser  [LOOP 2]  ✅ GREEN
+--------------------------------
+FAILURES:     0
+LAST ACTION:  fix unicode handling
+CONFIDENCE:   ↑ 0.81
+COST:         $0.42
+
+RECENT:
+- tokenizer boundary fix
+- unicode iteration fix
+```
+
+---
+
+# 🧭 8. The key property
+
+A good system’s logs should let you answer:
+
+> “Why did this commit happen?”
+
+without reading the code.
+
+---
+
+# 🚀 If you want next step
+
+We can:
+
+### A
+
+Turn this into a **real log schema (EDN/JSON)** + writer
+
+### B
+
+Build a **tmux dashboard renderer**
+
+### C
+
+Add **query language** (Babashka + jq style)
+
+### D
+
+Add **trace replay + branching (jujutsu integration)**
+
+---
+
+Just say:
+
+> “materialize this”
+
+and we’ll turn this from imagined logs → running system.

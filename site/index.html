@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Orwelliana</title>
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Structured Agent Traces</p>
+        <h1>Logs that explain why the commit happened.</h1>
+        <p class="lede">
+          Orwelliana is a tiny operator control plane for typed event streams,
+          cross-repo health checks, and tmux-friendly observability.
+        </p>
+        <div class="hero-actions">
+          <a href="https://github.com/uprootiny/Orwelliana" id="repo-link">View Repo</a>
+          <label class="upload">
+            <span>Load JSONL Trace</span>
+            <input id="file-input" type="file" accept=".jsonl,.log,.txt" />
+          </label>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="panel stat-panel">
+          <h2>Overview</h2>
+          <div id="overview" class="stats"></div>
+        </article>
+        <article class="panel">
+          <h2>Recent Events</h2>
+          <div id="events" class="events"></div>
+        </article>
+      </section>
+
+      <section class="grid lower">
+        <article class="panel">
+          <h2>Channel Counts</h2>
+          <div id="channels" class="channels"></div>
+        </article>
+        <article class="panel">
+          <h2>Derived View</h2>
+          <pre id="derived" class="derived"></pre>
+        </article>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+  </html>
