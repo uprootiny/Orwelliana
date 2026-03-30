@@ -1,5 +1,8 @@
 # Orwelliana
 
+[![CI](https://github.com/uprootiny/Orwelliana/actions/workflows/ci.yml/badge.svg)](https://github.com/uprootiny/Orwelliana/actions/workflows/ci.yml)
+[![Pages](https://github.com/uprootiny/Orwelliana/actions/workflows/pages.yml/badge.svg)](https://github.com/uprootiny/Orwelliana/actions/workflows/pages.yml)
+
 `Orwelliana` is a small Babashka toolkit for structured agent traces and cross-repo operator scaffolding. It turns the design from this session into a real JSONL event stream with a schema, trace writer, query surface, derived views, a tmux-friendly dashboard, and target-repo inspection/health checks.
 
 The project is explicitly bootstrapped from the ongoing session in this workspace. The seed note lives in [`paste`](/home/uprootiny/Orwelliana/paste).
