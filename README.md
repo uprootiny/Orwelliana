@@ -89,6 +89,22 @@ The repo also ships a static landing page and browser trace viewer in [`site/`](
 - a local JSONL trace uploader
 - a browser summary of recent events, channel counts, and derived views
 
+## Deployment Graph
+
+`Orwelliana` also carries a simple deployment inventory in [`ops/fleet.edn`](/home/uprootiny/Orwelliana/ops/fleet.edn) and a CLI summary:
+
+```bash
+bb -m orwelliana.core fleet path=ops/fleet.edn
+```
+
+This is meant to force a graph-shaped view of the estate:
+
+- preferred target: `gce-primary`
+- local sprawl explicitly marked as `:live`, `:stale`, or `:dead`
+- degraded services surfaced as typed inventory, not terminal folklore
+
+The NixOps-oriented infrastructure note is in [`docs/nixops-mastery.md`](/home/uprootiny/Orwelliana/docs/nixops-mastery.md).
+
 ## Why this exists
 
 The key property is simple: a good agent system’s logs should let you answer “why did this commit happen?” without reading the code.

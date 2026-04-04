@@ -17,3 +17,11 @@
            (core/trajectory core/sample-trace)))
     (is (= {"lexer::unicode" ["incorrect byte-length assumption"]}
            (core/failure-manifold core/sample-trace)))))
+
+(deftest fleet-views
+  (testing "fleet summary highlights preferred targets and degraded services"
+    (let [fleet (core/read-edn-file "ops/fleet.edn")]
+      (is (= "gce-primary" (:preferred_target (core/fleet-summary fleet))))
+      (is (= 2 (:dead (core/fleet-summary fleet))))
+      (is (= 4 (:stale (core/fleet-summary fleet))))
+      (is (= 13 (:services_total (core/fleet-summary fleet)))))))

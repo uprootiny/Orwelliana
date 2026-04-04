@@ -1,0 +1,89 @@
+{:deployment {:name "legal-estate"
+              :thesis "Prefer one Google instance over fragmented local listeners."}
+ :targets [{:name "gce-primary"
+            :kind :google-compute-instance
+            :preferred true
+            :region "europe-west"
+            :role "canonical deployment target"}
+           {:name "local-lab"
+            :kind :workstation
+            :preferred false
+            :role "development spillover"}]
+ :services [{:name "solvulator-backend"
+             :port 9801
+             :status :live
+             :location :local
+             :target "local-lab"
+             :summary "Live locally; candidate to move to gce-primary."}
+            {:name "legalcasework"
+             :port 8340
+             :status :live
+             :location :local
+             :target "local-lab"
+             :summary "Babashka service is reachable but not on the preferred target."}
+            {:name "solvulator-warroom"
+             :port 19421
+             :status :live
+             :location :local
+             :target "local-lab"
+             :summary "Operational, but contributes to local estate sprawl."}
+            {:name "myclaizer"
+             :port 19422
+             :status :live
+             :location :local
+             :target "local-lab"
+             :summary "Live locally."}
+            {:name "legal-warroom"
+             :port 4444
+             :status :live
+             :location :local
+             :target "local-lab"
+             :summary "Node service reachable locally."}
+            {:name "grafana"
+             :port 19300
+             :status :live
+             :location :local
+             :target "local-lab"
+             :summary "Monitoring available locally."}
+            {:name "prometheus"
+             :port 19090
+             :status :live
+             :location :local
+             :target "local-lab"
+             :summary "Metrics available locally via redirect."}
+            {:name "static-file-server"
+             :port 11111
+             :status :stale
+             :location :local
+             :target "local-lab"
+             :summary "Listening, unknown content."}
+            {:name "metaops-martial-ui"
+             :port 11114
+             :status :stale
+             :location :local
+             :target "local-lab"
+             :summary "Static only; backend dead."}
+            {:name "old-solvulator"
+             :port 11115
+             :status :stale
+             :location :local
+             :target "local-lab"
+             :summary "Superseded by solvulator-backend on 9801."}
+            {:name "unknown-9800"
+             :port 9800
+             :status :stale
+             :location :local
+             :target "local-lab"
+             :summary "Listener returns 404; purpose unclear."}
+            {:name "inbox-server"
+             :port 11112
+             :status :dead
+             :location :local
+             :target "local-lab"
+             :summary "Down."}
+            {:name "warroom-server"
+             :port 11113
+             :status :dead
+             :location :local
+             :target "local-lab"
+             :summary "Down."}]}

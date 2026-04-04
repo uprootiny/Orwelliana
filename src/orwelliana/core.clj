@@ -2,6 +2,7 @@
   (:require
    [babashka.process :as process]
    [cheshire.core :as json]
+   [clojure.edn :as edn]
    [clojure.java.io :as io]
    [clojure.string :as str]))
 
@@ -102,7 +103,8 @@
   (println "  bb -m orwelliana.core dashboard path=trace.jsonl")
   (println "  bb -m orwelliana.core derive path=trace.jsonl")
   (println "  bb -m orwelliana.core inspect-repo target=/path/to/repo [path=trace.jsonl]")
-  (println "  bb -m orwelliana.core health-check target=/path/to/repo [path=trace.jsonl]"))
+  (println "  bb -m orwelliana.core health-check target=/path/to/repo [path=trace.jsonl]")
+  (println "  bb -m orwelliana.core fleet path=ops/fleet.edn"))
 
 (defn ensure-parent! [path]
   (let [parent (.getParentFile (io/file path))]
@@ -231,6 +233,48 @@
                  :failure_manifold (failure-manifold events)}]
     (println (json/generate-string derived {:pretty true}))))
 
+(defn read-edn-file [path]
+  (with-open [r (io/reader path)]
+    (edn/read {:eof nil} (java.io.PushbackReader. r))))
+
+(defn count-services [services status]
+  (count (filter #(= status (:status %)) services)))
+
+(defn preferred-target [fleet]
+  (some #(when (:preferred %) %) (:targets fleet)))
+
+(defn fleet-summary [fleet]
+  (let [services (:services fleet)
+        targets (:targets fleet)]
+    {:deployment (:deployment fleet)
+     :preferred_target (:name (preferred-target fleet))
+     :targets (count targets)
+     :services_total (count services)
+     :live (count-services services :live)
+     :stale (count-services services :stale)
+     :dead (count-services services :dead)
+     :local_only (count (filter #(= :local (:location %)) services))}))
+
+(defn services-by-status [fleet status]
+  (->> (:services fleet)
+       (filter #(= status (:status %)))
+       (map (fn [service]
+              {:name (:name service)
+               :port (:port service)
+               :target (:target service)
+               :summary (:summary service)}))
+       vec))
+
+(defn fleet! [{:keys [path]}]
+  (let [fleet (read-edn-file (or path "ops/fleet.edn"))
+        summary (fleet-summary fleet)
+        preferred (preferred-target fleet)
+        report {:summary summary
+                :preferred_target preferred
+                :dead (services-by-status fleet :dead)
+                :stale (services-by-status fleet :stale)}]
+    (println (json/generate-string report {:pretty true}))))
+
 (defn run-command [dir cmd]
   (let [result (process/shell {:out :string :err :string :dir dir :continue true} "bash" "-lc" cmd)]
     {:command cmd
@@ -320,6 +364,7 @@
       "query" (query! opts)
       "dashboard" (dashboard! opts)
       "derive" (derive! opts)
+      "fleet" (fleet! opts)
       "inspect-repo" (inspect-repo! opts)
       "health-check" (health-check! opts)
       (usage))))
