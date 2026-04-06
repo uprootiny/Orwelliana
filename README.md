@@ -104,6 +104,7 @@ This is meant to force a graph-shaped view of the estate:
 - degraded services surfaced as typed inventory, not terminal folklore
 
 The NixOps-oriented infrastructure note is in [`docs/nixops-mastery.md`](/home/uprootiny/Orwelliana/docs/nixops-mastery.md).
+The corresponding lab scaffold is in [`ops/nixops/README.md`](/home/uprootiny/Orwelliana/ops/nixops/README.md).
 
 ## Why this exists
 
