@@ -86,6 +86,48 @@
     :event "usage"
     :details {:tokens_total 18234 :cost_usd 0.42 :loops 2}}])
 
+(def sample-conversation
+  [{:ts "2026-03-30T12:00:00Z"
+    :channel "conversation"
+    :event "message"
+    :session "demo"
+    :summary "You are attached to parser-lib. Keep notes terse."
+    :details {:role "system"
+              :content "You are attached to parser-lib. Keep notes terse."
+              :content_chars 48}}
+   {:ts "2026-03-30T12:00:01Z"
+    :channel "conversation"
+    :event "message"
+    :session "demo"
+    :summary "Find the current failures."
+    :details {:role "user"
+              :content "Find the current failures."
+              :content_chars 26}}
+   {:ts "2026-03-30T12:00:02Z"
+    :channel "conversation"
+    :event "message"
+    :session "demo"
+    :summary "Three tests are failing in tokenizer, parser, and lexer."
+    :details {:role "assistant"
+              :content "Three tests are failing in tokenizer, parser, and lexer."
+              :content_chars 57}}
+   {:ts "2026-03-30T12:00:03Z"
+    :channel "conversation"
+    :event "message"
+    :session "demo"
+    :summary "Focus on the tokenizer first and keep the context small."
+    :details {:role "user"
+              :content "Focus on the tokenizer first and keep the context small."
+              :content_chars 58}}
+   {:ts "2026-03-30T12:00:04Z"
+    :channel "conversation"
+    :event "message"
+    :session "demo"
+    :summary "I will patch tokenizer.rs and rerun cargo test."
+    :details {:role "assistant"
+              :content "I will patch tokenizer.rs and rerun cargo test."
+              :content_chars 48}}])
+
 (defn parse-kv [arg]
   (let [[k v] (str/split arg #"=" 2)]
     [(keyword k) v]))
@@ -99,7 +141,9 @@
   (println "Usage:")
   (println "  bb -m orwelliana.core simulate path=trace.jsonl")
   (println "  bb -m orwelliana.core emit path=trace.jsonl channel=execution event=apply_patch summary='...' [details='{\"file\":\"x\"}']")
+  (println "  bb -m orwelliana.core emit-message path=trace.jsonl session=ops role=user content='Investigate the failing tests'")
   (println "  bb -m orwelliana.core query path=trace.jsonl [channel=execution] [event=apply_patch]")
+  (println "  bb -m orwelliana.core convo path=trace.jsonl [session=ops] [limit=6] [chars=4000]")
   (println "  bb -m orwelliana.core dashboard path=trace.jsonl")
   (println "  bb -m orwelliana.core derive path=trace.jsonl")
   (println "  bb -m orwelliana.core inspect-repo target=/path/to/repo [path=trace.jsonl]")
@@ -142,6 +186,17 @@
   (when s
     (json/parse-string s true)))
 
+(defn parse-int [value default]
+  (if (some? value)
+    (parse-long value)
+    default))
+
+(defn preview-text [text]
+  (let [trimmed (str/trim (or text ""))]
+    (if (> (count trimmed) 96)
+      (str (subs trimmed 0 93) "...")
+      trimmed)))
+
 (defn simulate! [{:keys [path]}]
   (write-events! (or path "traces/sample.jsonl") sample-trace)
   (println (str "wrote " (count sample-trace) " events to " (or path "traces/sample.jsonl"))))
@@ -166,6 +221,123 @@
    (fn [[k v]]
      (= (str (get event k)) v))
    (dissoc filters :path)))
+
+(defn conversation-message? [event]
+  (and (= "conversation" (:channel event))
+       (= "message" (:event event))))
+
+(defn message-role [event]
+  (get-in event [:details :role]))
+
+(defn message-content [event]
+  (or (get-in event [:details :content]) ""))
+
+(defn conversation-events
+  ([events]
+   (conversation-events events nil))
+  ([events session]
+   (cond->> events
+     true (filter conversation-message?)
+     session (filter #(= session (:session %))))))
+
+(defn conversation-sessions [events]
+  (->> events
+       conversation-events
+       (map :session)
+       (remove str/blank?)
+       distinct
+       vec))
+
+(defn latest-session [events]
+  (some-> (last (conversation-events events))
+          :session))
+
+(defn normalize-message [event]
+  {:ts (:ts event)
+   :session (:session event)
+   :role (message-role event)
+   :content (message-content event)
+   :summary (:summary event)
+   :chars (count (message-content event))})
+
+(defn clip-text [text max-chars]
+  (let [text (or text "")]
+    (cond
+      (neg? max-chars) ""
+      (<= (count text) max-chars) text
+      (<= max-chars 3) (subs text 0 max-chars)
+      :else (str (subs text 0 (- max-chars 3)) "..."))))
+
+(defn clipped-message [event max-chars]
+  (let [content (message-content event)
+        clipped (clip-text content max-chars)]
+    {:ts (:ts event)
+     :session (:session event)
+     :role (message-role event)
+     :content clipped
+     :summary (:summary event)
+     :chars (count clipped)
+     :truncated (< (count clipped) (count content))}))
+
+(defn bounded-history-window [events {:keys [session limit chars]}]
+  (let [resolved-session (or session (latest-session events))
+        limit (or limit 6)
+        chars (or chars 4000)
+        session-events (vec (conversation-events events resolved-session))
+        system-anchor (last (filter #(= "system" (message-role %)) session-events))
+        reserved-chars (if system-anchor
+                         (min chars (count (message-content system-anchor)))
+                         0)
+        non-system (remove #(= "system" (message-role %)) session-events)
+        selected (loop [remaining (reverse non-system)
+                        chosen []
+                        used-chars 0]
+                   (if (or (empty? remaining)
+                           (>= (count chosen) limit))
+                     chosen
+                     (let [event (first remaining)
+                           content-size (count (message-content event))
+                           next-size (+ used-chars content-size)
+                           include? (or (empty? chosen)
+                                        (<= (+ reserved-chars next-size) chars))]
+                       (recur (rest remaining)
+                              (if include? (conj chosen event) chosen)
+                              (if include? next-size used-chars)))))
+        raw-window-events (cond->> (reverse selected)
+                            system-anchor (cons system-anchor))
+        messages (loop [remaining raw-window-events
+                        acc []
+                        remaining-chars chars]
+                   (if (empty? remaining)
+                     acc
+                     (let [event (first remaining)
+                           message (clipped-message event remaining-chars)
+                           next-remaining (- remaining-chars (:chars message))]
+                       (recur (rest remaining)
+                              (conj acc message)
+                              next-remaining))))]
+    {:session resolved-session
+     :messages (vec (remove #(zero? (:chars %)) messages))
+     :message_count (count raw-window-events)
+     :chars (reduce + 0 (map :chars messages))}))
+
+(defn role-counts [events]
+  (->> events
+       conversation-events
+       (map message-role)
+       frequencies
+       (into (sorted-map))))
+
+(defn conversation-view [events {:keys [session limit chars]}]
+  (let [messages (conversation-events events session)]
+    {:sessions (conversation-sessions events)
+     :sessions_count (count (conversation-sessions events))
+     :messages_count (count messages)
+     :roles (role-counts (if session messages events))
+     :latest_session (latest-session events)
+     :window (bounded-history-window events {:session session
+                                             :limit limit
+                                             :chars chars})}))
 
 (defn query! [{:keys [path] :as filters}]
   (doseq [event (filter #(matches? filters %) (read-trace (or path "traces/sample.jsonl")))]
@@ -230,8 +402,39 @@
   (let [events (read-trace (or path "traces/sample.jsonl"))
         derived {:trajectory (trajectory events)
                  :confidence_curve (confidence-curve events)
-                 :failure_manifold (failure-manifold events)}]
+                 :failure_manifold (failure-manifold events)
+                 :conversation (conversation-view events {:limit 6 :chars 4000})}]
     (println (json/generate-string derived {:pretty true}))))
+
+(defn emit-message! [{:keys [path session role content] :as opts}]
+  (when (str/blank? session)
+    (throw (ex-info "Conversation messages require session=..." {:opts opts})))
+  (when (str/blank? role)
+    (throw (ex-info "Conversation messages require role=..." {:opts opts})))
+  (when (str/blank? content)
+    (throw (ex-info "Conversation messages require content=..." {:opts opts})))
+  (let [event (cond-> {:ts (or (:ts opts) (str (java.time.Instant/now)))
+                       :channel "conversation"
+                       :event "message"
+                       :session session
+                       :summary (preview-text content)
+                       :details {:role role
+                                 :content content
+                                 :content_chars (count content)}}
+                (:agent opts) (assoc :agent (:agent opts))
+                (:repo opts) (assoc :repo (:repo opts))
+                (:model opts) (assoc-in [:details :model] (:model opts))
+                (:provider opts) (assoc-in [:details :provider] (:provider opts))
+                (:tokens opts) (assoc-in [:details :tokens] (parse-long (:tokens opts))))]
+    (append-event! (or path "traces/session.jsonl") event)
+    (println (str "appended conversation.message to " (or path "traces/session.jsonl")))))
+
+(defn convo! [{:keys [path session limit chars]}]
+  (let [events (read-trace (or path "traces/sample.jsonl"))
+        view (conversation-view events {:session session
+                                        :limit (parse-int limit 6)
+                                        :chars (parse-int chars 4000)})]
+    (println (json/generate-string view {:pretty true}))))
 
 (defn read-edn-file [path]
   (with-open [r (io/reader path)]
@@ -361,7 +564,9 @@
     (case command
       "simulate" (simulate! opts)
       "emit" (emit! opts)
+      "emit-message" (emit-message! opts)
       "query" (query! opts)
+      "convo" (convo! opts)
       "dashboard" (dashboard! opts)
       "derive" (derive! opts)
       "fleet" (fleet! opts)

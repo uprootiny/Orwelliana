@@ -25,3 +25,18 @@
       (is (= 2 (:dead (core/fleet-summary fleet))))
       (is (= 4 (:stale (core/fleet-summary fleet))))
       (is (= 13 (:services_total (core/fleet-summary fleet)))))))
+
+(deftest conversation-views
+  (testing "conversation history is summarized and bounded for reuse"
+    (let [view (core/conversation-view core/sample-conversation {:session "demo"
+                                                                 :limit 2
+                                                                 :chars 120})
+          window (get-in view [:window :messages])]
+      (is (= ["demo"] (:sessions view)))
+      (is (= 5 (:messages_count view)))
+      (is (= {"assistant" 2 "system" 1 "user" 2} (:roles view)))
+      (is (= 2 (count window)))
+      (is (= "system" (:role (first window))))
+      (is (= ["I will patch tokenizer.rs and rerun cargo test."]
+             (mapv :content (rest window))))
+      (is (<= (:chars (:window view)) 120)))))

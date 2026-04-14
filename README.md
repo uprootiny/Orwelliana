@@ -10,10 +10,11 @@ The project is explicitly bootstrapped from the ongoing session in this workspac
 ## What it does
 
 - Writes canonical JSONL trace events with required keys: `ts`, `channel`, `event`
+- Stores typed conversation history as `conversation.message` events with session IDs and role/content metadata
 - Generates a session-seeded sample trace matching the ontology discussed here
 - Filters traces by channel and event
 - Renders a compact terminal dashboard suitable for a tmux pane
-- Computes derived semantic views like trajectory, confidence curve, and failure manifold
+- Computes derived semantic views like trajectory, confidence curve, failure manifold, and bounded conversation windows
 
 ## Quick start
 
@@ -33,6 +34,22 @@ bb -m orwelliana.core emit \
   event=apply_patch \
   summary="Fix off-by-one in tokenizer" \
   details='{"file":"src/tokenizer.rs","lines_changed":12}'
+```
+
+Append a conversation turn:
+
+```bash
+bb -m orwelliana.core emit-message \
+  path=traces/session.jsonl \
+  session=ops \
+  role=user \
+  content="Investigate the failing tests"
+```
+
+Inspect the bounded conversation window that would be safe to reuse as prompt context:
+
+```bash
+bb -m orwelliana.core convo path=traces/session.jsonl session=ops limit=6 chars=4000
 ```
 
 Inspect another repo and log what was discovered:
@@ -74,7 +91,9 @@ bb -m orwelliana.core health-check \
 
 - `bb -m orwelliana.core simulate path=...` writes the seeded sample trace
 - `bb -m orwelliana.core emit path=... channel=... event=...` appends one event
+- `bb -m orwelliana.core emit-message path=... session=... role=... content=...` appends one conversation turn
 - `bb -m orwelliana.core query path=... [channel=...] [event=...]` prints matching events
+- `bb -m orwelliana.core convo path=... [session=...] [limit=...] [chars=...]` prints a bounded conversation view
 - `bb -m orwelliana.core dashboard path=...` prints a tmux-friendly summary
 - `bb -m orwelliana.core derive path=...` prints higher-order semantic views
 - `bb -m orwelliana.core inspect-repo target=...` attaches to a second repo and records discovery state

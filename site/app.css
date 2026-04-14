@@ -156,6 +156,48 @@ h1 {
   padding-left: 18px;
 }
 
+.conversation {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.conversation-meta,
+.empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.message {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+}
+
+.role-system {
+  border-color: rgba(143, 185, 150, 0.35);
+}
+
+.role-user {
+  border-color: rgba(214, 106, 61, 0.35);
+}
+
+.role-assistant {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.message-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.message-head small {
+  color: var(--muted);
+}
+
 .derived {
   margin: 0;
   white-space: pre-wrap;
