@@ -128,6 +128,8 @@
               :content "I will patch tokenizer.rs and rerun cargo test."
               :content_chars 48}}])
 
+(declare detect-test-command)
+
 (defn parse-kv [arg]
   (let [[k v] (str/split arg #"=" 2)]
     [(keyword k) v]))
@@ -148,6 +150,7 @@
   (println "  bb -m orwelliana.core derive path=trace.jsonl")
   (println "  bb -m orwelliana.core inspect-repo target=/path/to/repo [path=trace.jsonl]")
   (println "  bb -m orwelliana.core health-check target=/path/to/repo [path=trace.jsonl]")
+  (println "  bb -m orwelliana.core deploy-doctor [target=.] [repo=owner/name] [verify_tests=true|false]")
   (println "  bb -m orwelliana.core fleet path=ops/fleet.edn"))
 
 (defn ensure-parent! [path]
@@ -189,6 +192,11 @@
 (defn parse-int [value default]
   (if (some? value)
     (parse-long value)
+    default))
+
+(defn parse-bool [value default]
+  (if (some? value)
+    (contains? #{"true" "1" "yes" "on"} (str/lower-case (str value)))
     default))
 
 (defn preview-text [text]
@@ -485,6 +493,175 @@
      :out (str/trim (:out result))
      :err (str/trim (:err result))}))
 
+(defn run-json-command [dir cmd]
+  (let [result (run-command dir cmd)]
+    (assoc result
+           :json
+           (when (and (zero? (:exit result))
+                      (not (str/blank? (:out result))))
+             (json/parse-string (:out result) true)))))
+
+(defn current-branch [status-line]
+  (second (re-find #"^## ([^.\s]+)" (or status-line ""))))
+
+(defn ahead-behind [status-line]
+  {:ahead (if-let [[_ n] (re-find #"ahead (\d+)" (or status-line ""))]
+            (parse-long n)
+            0)
+   :behind (if-let [[_ n] (re-find #"behind (\d+)" (or status-line ""))]
+             (parse-long n)
+             0)})
+
+(defn tracking-branch [status-line]
+  (second (re-find #"^## [^.\s]+\.\.\.([^ ]+)" (or status-line ""))))
+
+(defn git-state [status-output]
+  (let [[headline & body] (str/split-lines (or status-output ""))]
+    (merge
+     {:branch (current-branch headline)
+      :tracking (tracking-branch headline)
+      :dirty (boolean (seq body))
+      :changed_files (count body)}
+     (ahead-behind headline))))
+
+(defn origin-url->slug [origin-url]
+  (some-> origin-url
+          str/trim
+          (str/replace #"^git@github\.com:" "")
+          (str/replace #"^https://github\.com/" "")
+          (str/replace #"\.git$" "")))
+
+(defn repo-slug [dir explicit-repo]
+  (or explicit-repo
+      (let [origin (run-command dir "git remote get-url origin")]
+        (when (zero? (:exit origin))
+          (origin-url->slug (:out origin))))))
+
+(defn gh-run-list [dir slug]
+  (if (str/blank? slug)
+    {:error "No GitHub repo slug available"}
+    (run-json-command dir
+                      (str "gh run list --repo " slug
+                           " --limit 10 --json databaseId,workflowName,status,conclusion,displayTitle,headBranch,headSha,url"))))
+
+(defn pages-state [dir slug]
+  (if (str/blank? slug)
+    {:error "No GitHub repo slug available"}
+    (let [repo (run-json-command dir (str "gh api repos/" slug))
+          pages (run-json-command dir (str "gh api repos/" slug "/pages"))]
+      {:repo repo
+       :pages pages})))
+
+(defn public-url [pages]
+  (or (get-in pages [:pages :json :html_url])
+      (get-in pages [:repo :json :homepage])))
+
+(defn http-head [dir url]
+  (if (str/blank? url)
+    {:error "No public URL available"}
+    (let [result (run-command dir (str "curl -I -L --max-time 10 -s " url))
+          status-line (last (filter #(re-find #"^HTTP/" %) (str/split-lines (:out result))))
+          status-code (some->> status-line
+                               (re-find #"HTTP/\S+ (\d+)")
+                               second
+                               parse-long)]
+      (assoc result :status_code status-code))))
+
+(defn workflow-state [runs workflow-name]
+  (first (filter #(= workflow-name (:workflowName %)) runs)))
+
+(defn verdict [severity summary details]
+  {:severity severity
+   :summary summary
+   :details details})
+
+(defn deployment-verdicts [doctor]
+  (let [git (:git doctor)
+        repo (get-in doctor [:github :repo :json])
+        pages (get-in doctor [:github :pages :json])
+        http (:http doctor)
+        runs (:runs doctor)
+        ci (workflow-state runs "CI")
+        pages-run (workflow-state runs "Pages")]
+    (vec
+     (concat
+      (when (:dirty git)
+        [(verdict :warn "Worktree is dirty"
+                  {:changed_files (:changed_files git)})])
+      (when (pos? (:ahead git))
+        [(verdict :warn "Local branch is ahead of remote"
+                  {:ahead (:ahead git) :tracking (:tracking git)})])
+      (when (pos? (:behind git))
+        [(verdict :error "Local branch is behind remote"
+                  {:behind (:behind git) :tracking (:tracking git)})])
+      (when-not repo
+        [(verdict :error "GitHub repo metadata is unavailable"
+                  {:error (get-in doctor [:github :repo :err])})])
+      (when (and repo (not (:has_pages repo)))
+        [(verdict :error "GitHub Pages is not provisioned"
+                  {:repo (:full_name repo)})])
+      (when (and repo (:has_pages repo) (nil? pages))
+        [(verdict :error "Pages metadata is unavailable"
+                  {:repo (:full_name repo)
+                   :error (get-in doctor [:github :pages :err])})])
+      (when (and ci (not= "success" (:conclusion ci)))
+        [(verdict :warn "Latest CI run is not green"
+                  {:status (:status ci) :conclusion (:conclusion ci) :url (:url ci)})])
+      (when (and pages-run (not= "success" (:conclusion pages-run)))
+        [(verdict :warn "Latest Pages run is not green"
+                  {:status (:status pages-run) :conclusion (:conclusion pages-run) :url (:url pages-run)})])
+      (when (and (:status_code http) (not= 200 (:status_code http)))
+        [(verdict :error "Public URL is not healthy"
+                  {:url (public-url (:github doctor)) :status_code (:status_code http)})])))))
+
+(defn deploy-score [verdicts]
+  (let [errors (count (filter #(= :error (:severity %)) verdicts))
+        warns (count (filter #(= :warn (:severity %)) verdicts))]
+    (cond
+      (pos? errors) :blocked
+      (pos? warns) :degraded
+      :else :ready)))
+
+(defn deploy-summary [doctor]
+  (let [verdicts (deployment-verdicts doctor)]
+    {:repo (:slug doctor)
+     :status (deploy-score verdicts)
+     :branch (get-in doctor [:git :branch])
+     :head (:head doctor)
+     :public_url (public-url (:github doctor))
+     :pages_provisioned (when (contains? (or (get-in doctor [:github :repo :json]) {}) :has_pages)
+                          (boolean (get-in doctor [:github :repo :json :has_pages])))
+     :http_status (:status_code (:http doctor))
+     :verdicts verdicts}))
+
+(defn deploy-doctor-data [{:keys [target repo verify_tests]}]
+  (let [dir (.getCanonicalPath (io/file (or target ".")))
+        status (run-command dir "git status --short --branch")
+        head (run-command dir "git rev-parse HEAD")
+        slug (repo-slug dir repo)
+        github (pages-state dir slug)
+        runs-result (gh-run-list dir slug)
+        public (public-url github)
+        http (http-head dir public)
+        verify-tests? (parse-bool verify_tests true)
+        test-command (detect-test-command dir)
+        tests (when (and verify-tests? test-command)
+                (run-command dir test-command))
+        doctor {:target dir
+                :slug slug
+                :head (when (zero? (:exit head)) (:out head))
+                :git (git-state (:out status))
+                :test_command test-command
+                :verify_tests verify-tests?
+                :tests (when tests
+                         {:exit (:exit tests)
+                          :result (if (zero? (:exit tests)) "pass" "fail")
+                          :command test-command})
+                :github github
+                :runs (or (:json runs-result) [])
+                :http http}]
+    (assoc doctor :summary (deploy-summary doctor))))
+
 (defn detect-test-command [dir]
   (cond
     (.exists (io/file dir "mix.exs")) "mix lint"
@@ -558,6 +735,9 @@
       (append-event! trace-path event)
       (println (json/generate-string event {:pretty true})))))
 
+(defn deploy-doctor! [opts]
+  (println (json/generate-string (deploy-doctor-data opts) {:pretty true})))
+
 (defn -main [& args]
   (let [[command & rest] args
         opts (cli-map rest)]
@@ -572,4 +752,5 @@
       "fleet" (fleet! opts)
       "inspect-repo" (inspect-repo! opts)
       "health-check" (health-check! opts)
+      "deploy-doctor" (deploy-doctor! opts)
       (usage))))

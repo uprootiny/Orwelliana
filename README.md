@@ -15,6 +15,7 @@ The project is explicitly bootstrapped from the ongoing session in this workspac
 - Filters traces by channel and event
 - Renders a compact terminal dashboard suitable for a tmux pane
 - Computes derived semantic views like trajectory, confidence curve, failure manifold, and bounded conversation windows
+- Runs a `deploy-doctor` preflight for git state, Pages provisioning, workflow health, and public reachability
 
 ## Quick start
 
@@ -50,6 +51,18 @@ Inspect the bounded conversation window that would be safe to reuse as prompt co
 
 ```bash
 bb -m orwelliana.core convo path=traces/session.jsonl session=ops limit=6 chars=4000
+```
+
+Run the deployment preflight against the current repo:
+
+```bash
+bb -m orwelliana.core deploy-doctor target=. repo=uprootiny/Orwelliana
+```
+
+Skip local test execution during preflight:
+
+```bash
+bb -m orwelliana.core deploy-doctor target=. repo=uprootiny/Orwelliana verify_tests=false
 ```
 
 Inspect another repo and log what was discovered:
@@ -96,6 +109,7 @@ bb -m orwelliana.core health-check \
 - `bb -m orwelliana.core convo path=... [session=...] [limit=...] [chars=...]` prints a bounded conversation view
 - `bb -m orwelliana.core dashboard path=...` prints a tmux-friendly summary
 - `bb -m orwelliana.core derive path=...` prints higher-order semantic views
+- `bb -m orwelliana.core deploy-doctor [target=.] [repo=owner/name] [verify_tests=true|false]` runs deploy preflight checks (tests default to enabled)
 - `bb -m orwelliana.core inspect-repo target=...` attaches to a second repo and records discovery state
 - `bb -m orwelliana.core health-check target=...` runs that repo’s health command and records the result
 - `bb -m test-runner` runs the test suite
@@ -104,9 +118,9 @@ bb -m orwelliana.core health-check \
 
 The repo also ships a static landing page and browser trace viewer in [`site/`](/home/uprootiny/Orwelliana/site). Open [`site/index.html`](/home/uprootiny/Orwelliana/site/index.html) or publish it with GitHub Pages to get:
 
-- a project landing page
+- a project landing page that explains the operator model
 - a local JSONL trace uploader
-- a browser summary of recent events, channel counts, and derived views
+- browser views for recent events, bounded conversation windows, trajectories, and derived state
 
 ## Deployment Graph
 
@@ -124,6 +138,16 @@ This is meant to force a graph-shaped view of the estate:
 
 The NixOps-oriented infrastructure note is in [`docs/nixops-mastery.md`](/home/uprootiny/Orwelliana/docs/nixops-mastery.md).
 The corresponding lab scaffold is in [`ops/nixops/README.md`](/home/uprootiny/Orwelliana/ops/nixops/README.md).
+
+## Orientation
+
+If you are stepping into this repo as a new operator/agent, read in this order:
+
+- [`AGENTS.md`](/home/uprootiny/Orwelliana/AGENTS.md)
+- [`docs/PROJECT_STATE.md`](/home/uprootiny/Orwelliana/docs/PROJECT_STATE.md)
+- [`docs/NEXT_AGENT.md`](/home/uprootiny/Orwelliana/docs/NEXT_AGENT.md)
+- [`docs/SELF_OBSERVATORY.md`](/home/uprootiny/Orwelliana/docs/SELF_OBSERVATORY.md)
+- [`skills/self-observatory/SKILL.md`](/home/uprootiny/Orwelliana/skills/self-observatory/SKILL.md)
 
 ## Why this exists
 

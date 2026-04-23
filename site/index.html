@@ -8,23 +8,177 @@
   </head>
   <body>
     <main class="shell">
+      <header class="topbar">
+        <div class="brandlock">
+          <span class="brandmark">O</span>
+          <div>
+            <strong>Orwelliana</strong>
+            <span class="brand-sub">typed operator traces</span>
+          </div>
+        </div>
+        <nav class="topnav">
+          <a href="#capabilities">Capabilities</a>
+          <a href="#runbook">Runbook</a>
+          <a href="#viewer">Viewer</a>
+        </nav>
+      </header>
+
       <section class="hero">
-        <p class="eyebrow">Structured Agent Traces</p>
-        <h1>Logs that explain why the commit happened.</h1>
-        <p class="lede">
-          Orwelliana is a tiny operator control plane for typed event streams,
-          cross-repo health checks, and tmux-friendly observability.
-        </p>
-        <div class="hero-actions">
-          <a href="https://github.com/uprootiny/Orwelliana" id="repo-link">View Repo</a>
-          <label class="upload">
-            <span>Load JSONL Trace</span>
-            <input id="file-input" type="file" accept=".jsonl,.log,.txt" />
-          </label>
+        <div class="hero-copy">
+          <p class="eyebrow">Operator Memory and Deploy Triage</p>
+          <h1>Typed traces for what happened, why it happened, and what is safe to do next.</h1>
+          <p class="lede">
+            Orwelliana turns agent activity into structured evidence: execution
+            traces, bounded conversation history, deploy-doctor checks, and
+            fleet summaries that can be queried instead of guessed.
+          </p>
+          <div class="hero-highlights">
+            <div class="highlight-pill">JSONL event stream</div>
+            <div class="highlight-pill">bounded prompt window</div>
+            <div class="highlight-pill">deploy preflight</div>
+            <div class="highlight-pill">fleet inventory</div>
+          </div>
+          <div class="hero-actions">
+            <a href="https://github.com/uprootiny/Orwelliana" id="repo-link">Repository</a>
+            <label class="upload">
+              <span>Load JSONL Trace</span>
+              <input id="file-input" type="file" accept=".jsonl,.log,.txt" />
+            </label>
+          </div>
+          <p id="loaded-trace" class="trace-note">Viewing the bundled sample trace.</p>
+        </div>
+        <aside class="hero-aside panel">
+          <p class="kicker">Operational Contract</p>
+          <div id="doctor-summary" class="doctor-summary"></div>
+          <div class="doctor-points">
+            <div>
+              <span class="point-label">Trace</span>
+              <strong>Canonical event stream</strong>
+            </div>
+            <div>
+              <span class="point-label">Conversation</span>
+              <strong>Bounded prompt window</strong>
+            </div>
+            <div>
+              <span class="point-label">Deploy</span>
+              <strong>Platform state before optimism</strong>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="status-strip">
+        <div class="strip-card">
+          <span class="strip-label">Current Model</span>
+          <strong id="status-headline">Loading sample trace</strong>
+        </div>
+        <div class="strip-card">
+          <span class="strip-label">Latest Session</span>
+          <strong id="status-session">n/a</strong>
+        </div>
+        <div class="strip-card">
+          <span class="strip-label">Prompt Budget</span>
+          <strong id="status-window">0 chars</strong>
+        </div>
+        <div class="strip-card">
+          <span class="strip-label">Failure Surface</span>
+          <strong id="status-failure">0 active causes</strong>
         </div>
       </section>
 
-      <section class="grid">
+      <section id="capabilities" class="feature-grid">
+        <article class="feature-card">
+          <p class="kicker">Trace</p>
+          <h2>Every action is typed and attributable.</h2>
+          <p>
+            Events carry channel, event, summary, details, and confidence, so a
+            run can be replayed and audited without reading the code first.
+          </p>
+        </article>
+        <article class="feature-card">
+          <p class="kicker">Conversation</p>
+          <h2>History is stored as operator-grade state, not prompt sludge.</h2>
+          <p>
+            Sessions, roles, and bounded context windows are explicit. You can
+            reuse the latest safe slice without letting prompt growth become a
+            hidden failure mode.
+          </p>
+        </article>
+        <article class="feature-card">
+          <p class="kicker">Deploy Doctor</p>
+          <h2>Infrastructure prerequisites are checked before redeploy.</h2>
+          <p>
+            The deploy doctor inspects Git state, recent CI and Pages runs,
+            Pages provisioning, and public reachability so platform failures
+            stop looking like app failures.
+          </p>
+        </article>
+      </section>
+
+      <section class="story-grid">
+        <article class="panel story-card">
+          <p class="kicker">Why It Exists</p>
+          <h2>Most agent logs are output. This is state.</h2>
+          <p class="story-copy">
+            The point is not pretty telemetry. The point is making operator
+            judgment inspectable: what the agent saw, what it changed, what it
+            believed, what failed, and which slice of conversation is still
+            safe to feed back into the loop.
+          </p>
+        </article>
+        <article class="panel pipeline-card">
+          <p class="kicker">Pipeline</p>
+          <h2>Pure model, explicit effects</h2>
+          <div class="pipeline">
+            <div class="pipeline-step">
+              <span>1</span>
+              <strong>Observe</strong>
+              <small>trace, repo, fleet</small>
+            </div>
+            <div class="pipeline-step">
+              <span>2</span>
+              <strong>Bound</strong>
+              <small>conversation window</small>
+            </div>
+            <div class="pipeline-step">
+              <span>3</span>
+              <strong>Verify</strong>
+              <small>CI, Pages, reachability</small>
+            </div>
+            <div class="pipeline-step">
+              <span>4</span>
+              <strong>Act</strong>
+              <small>deploy, health-check, iterate</small>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section id="runbook" class="workflow">
+        <article class="panel">
+          <p class="kicker">Runbook</p>
+          <h2>Technique encoded</h2>
+          <ol class="workflow-list">
+            <li>Prove the local state is coherent.</li>
+            <li>Check VCS state and branch drift.</li>
+            <li>Inspect provider state before assuming code broke deploy.</li>
+            <li>Verify public reachability after the platform says green.</li>
+          </ol>
+        </article>
+        <article class="panel">
+          <p class="kicker">CLI Surface</p>
+          <h2>Commands that matter</h2>
+          <div class="command-list">
+            <code>bb -m orwelliana.core emit-message ...</code>
+            <code>bb -m orwelliana.core convo ...</code>
+            <code>bb -m orwelliana.core derive ...</code>
+            <code>bb -m orwelliana.core deploy-doctor ...</code>
+            <code>bb -m orwelliana.core fleet ...</code>
+          </div>
+        </article>
+      </section>
+
+      <section id="viewer" class="dashboard-grid">
         <article class="panel stat-panel">
           <h2>Overview</h2>
           <div id="overview" class="stats"></div>
@@ -35,7 +189,7 @@
         </article>
       </section>
 
-      <section class="grid lower">
+      <section class="dashboard-grid lower">
         <article class="panel">
           <h2>Channel Counts</h2>
           <div id="channels" class="channels"></div>
@@ -46,7 +200,11 @@
         </article>
       </section>
 
-      <section class="grid lower">
+      <section class="dashboard-grid lower">
+        <article class="panel">
+          <h2>Trajectory</h2>
+          <div id="trajectory" class="trajectory"></div>
+        </article>
         <article class="panel">
           <h2>Derived View</h2>
           <pre id="derived" class="derived"></pre>
@@ -56,4 +214,4 @@
 
     <script src="./app.js"></script>
   </body>
-  </html>
+</html>
