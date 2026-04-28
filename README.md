@@ -20,6 +20,7 @@ The project is explicitly bootstrapped from the ongoing session in this workspac
 ## Quick start
 
 ```bash
+bb -m orwelliana.core version
 bb -m orwelliana.core simulate path=traces/sample.jsonl
 bb -m orwelliana.core dashboard path=traces/sample.jsonl
 bb -m orwelliana.core query path=traces/sample.jsonl channel=execution
@@ -109,6 +110,7 @@ bb -m orwelliana.core health-check \
 ## Commands
 
 - `bb -m orwelliana.core simulate path=...` writes the seeded sample trace
+- `bb -m orwelliana.core version` prints the current point release version
 - `bb -m orwelliana.core emit path=... channel=... event=...` appends one event
 - `bb -m orwelliana.core emit-message path=... session=... role=... content=...` appends one conversation turn
 - `bb -m orwelliana.core query path=... [channel=...] [event=...]` prints matching events
@@ -158,3 +160,7 @@ If you are stepping into this repo as a new operator/agent, read in this order:
 ## Why this exists
 
 The key property is simple: a good agent system’s logs should let you answer “why did this commit happen?” without reading the code.
+
+## Release
+
+Current point release: `v0.1.0` (see [`CHANGELOG.md`](/home/uprootiny/Orwelliana/CHANGELOG.md)).

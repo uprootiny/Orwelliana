@@ -5,6 +5,7 @@
 
 (deftest sample-trace-shape
   (testing "sample events satisfy the required schema"
+    (is (= "0.1.0" core/project-version))
     (is (= 14 (count core/sample-trace)))
     (is (every? core/valid-event? core/sample-trace))))
 

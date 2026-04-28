@@ -9,6 +9,9 @@
 (def required-keys
   [:ts :channel :event])
 
+(def project-version
+  "0.1.0")
+
 (def sample-trace
   [{:ts "2026-03-30T12:00:00Z"
     :channel "system"
@@ -141,6 +144,7 @@
 
 (defn usage []
   (println "Usage:")
+  (println "  bb -m orwelliana.core version")
   (println "  bb -m orwelliana.core simulate path=trace.jsonl")
   (println "  bb -m orwelliana.core emit path=trace.jsonl channel=execution event=apply_patch summary='...' [details='{\"file\":\"x\"}']")
   (println "  bb -m orwelliana.core emit-message path=trace.jsonl session=ops role=user content='Investigate the failing tests'")
@@ -208,6 +212,11 @@
 (defn simulate! [{:keys [path]}]
   (write-events! (or path "traces/sample.jsonl") sample-trace)
   (println (str "wrote " (count sample-trace) " events to " (or path "traces/sample.jsonl"))))
+
+(defn version! []
+  (println (json/generate-string {:name "orwelliana"
+                                  :version project-version}
+                                 {:pretty true})))
 
 (defn emit! [{:keys [path details] :as opts}]
   (let [event (cond-> {:ts (or (:ts opts) (str (java.time.Instant/now)))
@@ -759,6 +768,7 @@
   (let [[command & rest] args
         opts (cli-map rest)]
     (case command
+      "version" (version!)
       "simulate" (simulate! opts)
       "emit" (emit! opts)
       "emit-message" (emit-message! opts)
