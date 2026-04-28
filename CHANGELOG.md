@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+- Added tailnet integration:
+  - `bb -m orwelliana.core tailnet` for declared/live tailnet visibility
+  - drift detection for missing declared peers, unexpected live peers, and
+    offline declared peers
+  - `fleet` output now includes a tailnet summary
+- Fixed `ops/fleet.edn` structure so it parses as valid EDN.
+- Added tests covering tailnet drift and summary behavior.
+
 ## v0.1.0 - 2026-04-28
 
 Core functionality release.

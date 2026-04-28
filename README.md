@@ -25,6 +25,7 @@ bb -m orwelliana.core simulate path=traces/sample.jsonl
 bb -m orwelliana.core dashboard path=traces/sample.jsonl
 bb -m orwelliana.core query path=traces/sample.jsonl channel=execution
 bb -m orwelliana.core derive path=traces/sample.jsonl
+bb -m orwelliana.core tailnet path=ops/fleet.edn live=false
 ```
 
 Append an event:
@@ -118,6 +119,7 @@ bb -m orwelliana.core health-check \
 - `bb -m orwelliana.core dashboard path=...` prints a tmux-friendly summary
 - `bb -m orwelliana.core derive path=...` prints higher-order semantic views
 - `bb -m orwelliana.core deploy-doctor [target=.] [repo=owner/name] [verify_tests=true|false] [remote_checks=true|false]` runs deploy preflight checks (tests and remote checks default to enabled)
+- `bb -m orwelliana.core tailnet [path=ops/fleet.edn] [live=true|false]` reports declared tailnet peers and optional live drift via `tailscale status --json`
 - `bb -m orwelliana.core inspect-repo target=...` attaches to a second repo and records discovery state
 - `bb -m orwelliana.core health-check target=...` runs that repo’s health command and records the result
 - `bb -m test-runner` runs the test suite
@@ -136,6 +138,7 @@ The repo also ships a static landing page and browser trace viewer in [`site/`](
 
 ```bash
 bb -m orwelliana.core fleet path=ops/fleet.edn
+bb -m orwelliana.core tailnet path=ops/fleet.edn
 ```
 
 This is meant to force a graph-shaped view of the estate:

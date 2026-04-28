@@ -4,6 +4,7 @@
    [cheshire.core :as json]
    [clojure.edn :as edn]
    [clojure.java.io :as io]
+   [clojure.set :as set]
    [clojure.string :as str]))
 
 (def required-keys
@@ -131,7 +132,7 @@
               :content "I will patch tokenizer.rs and rerun cargo test."
               :content_chars 48}}])
 
-(declare detect-test-command)
+(declare detect-test-command run-command)
 
 (defn parse-kv [arg]
   (let [[k v] (str/split arg #"=" 2)]
@@ -155,6 +156,7 @@
   (println "  bb -m orwelliana.core inspect-repo target=/path/to/repo [path=trace.jsonl]")
   (println "  bb -m orwelliana.core health-check target=/path/to/repo [path=trace.jsonl]")
   (println "  bb -m orwelliana.core deploy-doctor [target=.] [repo=owner/name] [verify_tests=true|false] [remote_checks=true|false]")
+  (println "  bb -m orwelliana.core tailnet [path=ops/fleet.edn] [live=true|false]")
   (println "  bb -m orwelliana.core fleet path=ops/fleet.edn"))
 
 (defn ensure-parent! [path]
@@ -475,6 +477,95 @@
      :dead (count-services services :dead)
      :local_only (count (filter #(= :local (:location %)) services))}))
 
+(defn declared-tailnet-peers [fleet]
+  (->> (:tailscale-peers fleet)
+       (map (fn [peer]
+              {:name (:name peer)
+               :ip (:ip peer)
+               :os (:os peer)
+               :ssh (:ssh peer)}))
+       (filter :ip)
+       vec))
+
+(defn parse-os [value]
+  (when (some? value)
+    (keyword (str/lower-case (str value)))))
+
+(defn live-tailnet-peers [status-json]
+  (->> (vals (or (:Peer status-json) {}))
+       (map (fn [peer]
+              {:name (or (:HostName peer) (:DNSName peer))
+               :ip (first (:TailscaleIPs peer))
+               :os (parse-os (:OS peer))
+               :online (boolean (:Online peer))
+               :active (boolean (:Active peer))
+               :exit_node (boolean (:ExitNode peer))}))
+       (filter :ip)
+       vec))
+
+(defn tailnet-live-status [dir]
+  (let [result (run-command dir "tailscale status --json")]
+    (if (zero? (:exit result))
+      (let [parsed (json/parse-string (:out result) true)
+            self (:Self parsed)]
+        {:available true
+         :self {:name (or (:HostName self) (:DNSName self))
+                :ip (first (:TailscaleIPs self))
+                :os (parse-os (:OS self))}
+         :peers (live-tailnet-peers parsed)})
+      {:available false
+       :error (or (:err result) "tailscale status failed")
+       :exit (:exit result)})))
+
+(defn by-ip [peers]
+  (into {} (map (juxt :ip identity) peers)))
+
+(defn tailnet-drift [declared live]
+  (let [declared-by-ip (by-ip declared)
+        live-by-ip (by-ip live)
+        declared-ips (set (keys declared-by-ip))
+        live-ips (set (keys live-by-ip))
+        missing-ips (set/difference declared-ips live-ips)
+        unexpected-ips (set/difference live-ips declared-ips)
+        offline-declared (->> live
+                              (filter (fn [peer]
+                                        (and (contains? declared-by-ip (:ip peer))
+                                             (not (:online peer)))))
+                              vec)]
+    {:missing_declared (->> missing-ips (map declared-by-ip) vec)
+     :unexpected_live (->> unexpected-ips (map live-by-ip) vec)
+     :offline_declared offline-declared}))
+
+(defn tailnet-summary [fleet live-state]
+  (let [declared (declared-tailnet-peers fleet)
+        vpn (get-in fleet [:deployment :vpn])
+        live-peers (or (:peers live-state) [])
+        drift (when (:available live-state)
+                (tailnet-drift declared live-peers))
+        missing (count (or (:missing_declared drift) []))
+        unexpected (count (or (:unexpected_live drift) []))
+        offline (count (or (:offline_declared drift) []))]
+    {:engine (:engine vpn)
+     :vpn_state (:state vpn)
+     :declared {:peers declared
+                :count (count declared)}
+     :live (if (:available live-state)
+             {:available true
+              :self (:self live-state)
+              :peers live-peers
+              :count (count live-peers)}
+             {:available false
+              :error (:error live-state)
+              :exit (:exit live-state)})
+     :drift (when (:available live-state) drift)
+     :status (cond
+               (not (:available live-state)) :unknown
+               (or (pos? missing) (pos? unexpected) (pos? offline)) :drift
+               :else :aligned)
+     :counts {:missing_declared missing
+              :unexpected_live unexpected
+              :offline_declared offline}}))
+
 (defn services-by-status [fleet status]
   (->> (:services fleet)
        (filter #(= status (:status %)))
@@ -489,10 +580,21 @@
   (let [fleet (read-edn-file (or path "ops/fleet.edn"))
         summary (fleet-summary fleet)
         preferred (preferred-target fleet)
+        tailnet (tailnet-summary fleet {:available false :error "live checks disabled"})
         report {:summary summary
                 :preferred_target preferred
+                :tailnet tailnet
                 :dead (services-by-status fleet :dead)
                 :stale (services-by-status fleet :stale)}]
+    (println (json/generate-string report {:pretty true}))))
+
+(defn tailnet! [{:keys [path live]}]
+  (let [fleet (read-edn-file (or path "ops/fleet.edn"))
+        live? (parse-bool live true)
+        live-state (if live?
+                     (tailnet-live-status ".")
+                     {:available false :error "live checks disabled"})
+        report {:tailnet (tailnet-summary fleet live-state)}]
     (println (json/generate-string report {:pretty true}))))
 
 (defn run-command [dir cmd]
@@ -777,6 +879,7 @@
       "dashboard" (dashboard! opts)
       "derive" (derive! opts)
       "fleet" (fleet! opts)
+      "tailnet" (tailnet! opts)
       "inspect-repo" (inspect-repo! opts)
       "health-check" (health-check! opts)
       "deploy-doctor" (deploy-doctor! opts)

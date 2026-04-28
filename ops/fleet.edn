@@ -1,5 +1,25 @@
 {:deployment {:name "legal-estate"
-              :thesis "Prefer one Google instance over fragmented local listeners."}
+               :thesis "Prefer one Google instance over fragmented local listeners."
+               :vpn {:engine :tailscale
+                     :state :active
+                     :exit-node nil
+                     :serve nil}}
+ :tailscale-peers [{:name "hyle"
+                    :ip "100.74.74.35"
+                    :os :linux
+                    :ssh :enabled}
+                   {:name "helix-lab"
+                    :ip "100.121.51.4"
+                    :os :linux
+                    :ssh :enabled}
+                   {:name "iphone-13"
+                    :ip "100.75.242.46"
+                    :os :ios
+                    :ssh :disabled}
+                   {:name "uprootinys-macbook-air"
+                    :ip "100.98.138.108"
+                    :os :macos
+                    :ssh :disabled}]
  :targets [{:name "gce-primary"
             :kind :google-compute-instance
             :preferred true

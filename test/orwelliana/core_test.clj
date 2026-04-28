@@ -149,3 +149,24 @@
       (is (= :blocked (:status summary)))
       (is (= 1 (count (:verdicts summary))))
       (is (= :error (:severity (first (:verdicts summary))))))))
+
+(deftest tailnet-summary-and-drift
+  (testing "tailnet drift identifies missing, unexpected, and offline peers"
+    (let [fleet {:deployment {:vpn {:engine :tailscale :state :active}}
+                 :tailscale-peers [{:name "hyle" :ip "100.74.74.35" :os :linux :ssh :enabled}
+                                   {:name "helix-lab" :ip "100.121.51.4" :os :linux :ssh :enabled}]}
+          live {:available true
+                :self {:name "dev-mac" :ip "100.98.138.108" :os :macos}
+                :peers [{:name "hyle" :ip "100.74.74.35" :os :linux :online false}
+                        {:name "iphone-13" :ip "100.75.242.46" :os :ios :online true}]}
+          summary (core/tailnet-summary fleet live)]
+      (is (= :drift (:status summary)))
+      (is (= 1 (get-in summary [:counts :missing_declared])))
+      (is (= 1 (get-in summary [:counts :unexpected_live])))
+      (is (= 1 (get-in summary [:counts :offline_declared])))))
+  (testing "tailnet summary marks unavailable live state as unknown"
+    (let [fleet {:deployment {:vpn {:engine :tailscale :state :active}}
+                 :tailscale-peers [{:name "hyle" :ip "100.74.74.35" :os :linux :ssh :enabled}]}
+          summary (core/tailnet-summary fleet {:available false :error "disabled"})]
+      (is (= :unknown (:status summary)))
+      (is (= false (get-in summary [:live :available]))))))
