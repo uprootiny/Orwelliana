@@ -59,6 +59,12 @@ Run the deployment preflight against the current repo:
 bb -m orwelliana.core deploy-doctor target=. repo=uprootiny/Orwelliana
 ```
 
+Run a local-only preflight (skip GitHub/API reachability checks):
+
+```bash
+bb -m orwelliana.core deploy-doctor target=. repo=uprootiny/Orwelliana remote_checks=false
+```
+
 Skip local test execution during preflight:
 
 ```bash
@@ -109,7 +115,7 @@ bb -m orwelliana.core health-check \
 - `bb -m orwelliana.core convo path=... [session=...] [limit=...] [chars=...]` prints a bounded conversation view
 - `bb -m orwelliana.core dashboard path=...` prints a tmux-friendly summary
 - `bb -m orwelliana.core derive path=...` prints higher-order semantic views
-- `bb -m orwelliana.core deploy-doctor [target=.] [repo=owner/name] [verify_tests=true|false]` runs deploy preflight checks (tests default to enabled)
+- `bb -m orwelliana.core deploy-doctor [target=.] [repo=owner/name] [verify_tests=true|false] [remote_checks=true|false]` runs deploy preflight checks (tests and remote checks default to enabled)
 - `bb -m orwelliana.core inspect-repo target=...` attaches to a second repo and records discovery state
 - `bb -m orwelliana.core health-check target=...` runs that repo’s health command and records the result
 - `bb -m test-runner` runs the test suite

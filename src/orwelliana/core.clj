@@ -150,7 +150,7 @@
   (println "  bb -m orwelliana.core derive path=trace.jsonl")
   (println "  bb -m orwelliana.core inspect-repo target=/path/to/repo [path=trace.jsonl]")
   (println "  bb -m orwelliana.core health-check target=/path/to/repo [path=trace.jsonl]")
-  (println "  bb -m orwelliana.core deploy-doctor [target=.] [repo=owner/name] [verify_tests=true|false]")
+  (println "  bb -m orwelliana.core deploy-doctor [target=.] [repo=owner/name] [verify_tests=true|false] [remote_checks=true|false]")
   (println "  bb -m orwelliana.core fleet path=ops/fleet.edn"))
 
 (defn ensure-parent! [path]
@@ -577,6 +577,9 @@
 
 (defn deployment-verdicts [doctor]
   (let [git (:git doctor)
+        remote? (if (contains? doctor :remote_checks)
+                  (boolean (:remote_checks doctor))
+                  true)
         repo (get-in doctor [:github :repo :json])
         pages (get-in doctor [:github :pages :json])
         http (:http doctor)
@@ -594,23 +597,23 @@
       (when (pos? (:behind git))
         [(verdict :error "Local branch is behind remote"
                   {:behind (:behind git) :tracking (:tracking git)})])
-      (when-not repo
+      (when (and remote? (not repo))
         [(verdict :error "GitHub repo metadata is unavailable"
                   {:error (get-in doctor [:github :repo :err])})])
-      (when (and repo (not (:has_pages repo)))
+      (when (and remote? repo (not (:has_pages repo)))
         [(verdict :error "GitHub Pages is not provisioned"
                   {:repo (:full_name repo)})])
-      (when (and repo (:has_pages repo) (nil? pages))
+      (when (and remote? repo (:has_pages repo) (nil? pages))
         [(verdict :error "Pages metadata is unavailable"
                   {:repo (:full_name repo)
                    :error (get-in doctor [:github :pages :err])})])
-      (when (and ci (not= "success" (:conclusion ci)))
+      (when (and remote? ci (not= "success" (:conclusion ci)))
         [(verdict :warn "Latest CI run is not green"
                   {:status (:status ci) :conclusion (:conclusion ci) :url (:url ci)})])
-      (when (and pages-run (not= "success" (:conclusion pages-run)))
+      (when (and remote? pages-run (not= "success" (:conclusion pages-run)))
         [(verdict :warn "Latest Pages run is not green"
                   {:status (:status pages-run) :conclusion (:conclusion pages-run) :url (:url pages-run)})])
-      (when (and (:status_code http) (not= 200 (:status_code http)))
+      (when (and remote? (:status_code http) (not= 200 (:status_code http)))
         [(verdict :error "Public URL is not healthy"
                   {:url (public-url (:github doctor)) :status_code (:status_code http)})])))))
 
@@ -623,26 +626,39 @@
       :else :ready)))
 
 (defn deploy-summary [doctor]
-  (let [verdicts (deployment-verdicts doctor)]
+  (let [verdicts (deployment-verdicts doctor)
+        remote? (if (contains? doctor :remote_checks)
+                  (boolean (:remote_checks doctor))
+                  true)]
     {:repo (:slug doctor)
      :status (deploy-score verdicts)
      :branch (get-in doctor [:git :branch])
      :head (:head doctor)
+     :remote_checks remote?
      :public_url (public-url (:github doctor))
      :pages_provisioned (when (contains? (or (get-in doctor [:github :repo :json]) {}) :has_pages)
                           (boolean (get-in doctor [:github :repo :json :has_pages])))
      :http_status (:status_code (:http doctor))
      :verdicts verdicts}))
 
-(defn deploy-doctor-data [{:keys [target repo verify_tests]}]
+(defn deploy-doctor-data [{:keys [target repo verify_tests remote_checks]}]
   (let [dir (.getCanonicalPath (io/file (or target ".")))
         status (run-command dir "git status --short --branch")
         head (run-command dir "git rev-parse HEAD")
         slug (repo-slug dir repo)
-        github (pages-state dir slug)
-        runs-result (gh-run-list dir slug)
-        public (public-url github)
-        http (http-head dir public)
+        remote-checks? (parse-bool remote_checks true)
+        github (if remote-checks?
+                 (pages-state dir slug)
+                 {:skipped true})
+        runs-result (if remote-checks?
+                      (gh-run-list dir slug)
+                      {:json [] :skipped true})
+        public (if remote-checks?
+                 (public-url github)
+                 nil)
+        http (if remote-checks?
+               (http-head dir public)
+               {:skipped true})
         verify-tests? (parse-bool verify_tests true)
         test-command (detect-test-command dir)
         tests (when (and verify-tests? test-command)
@@ -651,6 +667,7 @@
                 :slug slug
                 :head (when (zero? (:exit head)) (:out head))
                 :git (git-state (:out status))
+                :remote_checks remote-checks?
                 :test_command test-command
                 :verify_tests verify-tests?
                 :tests (when tests

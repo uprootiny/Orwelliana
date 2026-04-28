@@ -20,7 +20,22 @@
 
 (deftest fleet-views
   (testing "fleet summary highlights preferred targets and degraded services"
-    (let [fleet (core/read-edn-file "ops/fleet.edn")]
+    (let [fleet {:deployment {:name "test"}
+                 :targets [{:name "gce-primary" :preferred true}
+                           {:name "backup" :preferred false}]
+                 :services [{:name "a" :status :live :location :local}
+                            {:name "b" :status :live :location :remote}
+                            {:name "c" :status :live :location :remote}
+                            {:name "d" :status :live :location :remote}
+                            {:name "e" :status :stale :location :local}
+                            {:name "f" :status :stale :location :local}
+                            {:name "g" :status :stale :location :remote}
+                            {:name "h" :status :stale :location :remote}
+                            {:name "i" :status :dead :location :local}
+                            {:name "j" :status :dead :location :remote}
+                            {:name "k" :status :live :location :local}
+                            {:name "l" :status :live :location :local}
+                            {:name "m" :status :live :location :remote}]}]
       (is (= "gce-primary" (:preferred_target (core/fleet-summary fleet))))
       (is (= 2 (:dead (core/fleet-summary fleet))))
       (is (= 4 (:stale (core/fleet-summary fleet))))
@@ -97,3 +112,39 @@
     (is (true? (core/parse-bool "true" false)))
     (is (true? (core/parse-bool "YES" false)))
     (is (false? (core/parse-bool "false" true)))))
+
+(deftest deploy-summary-local-only-mode
+  (testing "remote checks can be disabled for local-only preflight"
+    (let [doctor {:slug "uprootiny/Orwelliana"
+                  :head "abc123"
+                  :remote_checks false
+                  :git {:branch "main"
+                        :tracking "origin/main"
+                        :dirty false
+                        :changed_files 0
+                        :ahead 0
+                        :behind 0}
+                  :github {:skipped true}
+                  :runs []
+                  :http {:skipped true}}
+          summary (core/deploy-summary doctor)]
+      (is (= :ready (:status summary)))
+      (is (false? (:remote_checks summary)))
+      (is (empty? (:verdicts summary)))))
+  (testing "local-only mode still reports local branch problems"
+    (let [doctor {:slug "uprootiny/Orwelliana"
+                  :head "abc123"
+                  :remote_checks false
+                  :git {:branch "main"
+                        :tracking "origin/main"
+                        :dirty false
+                        :changed_files 0
+                        :ahead 0
+                        :behind 2}
+                  :github {:skipped true}
+                  :runs []
+                  :http {:skipped true}}
+          summary (core/deploy-summary doctor)]
+      (is (= :blocked (:status summary)))
+      (is (= 1 (count (:verdicts summary))))
+      (is (= :error (:severity (first (:verdicts summary))))))))
